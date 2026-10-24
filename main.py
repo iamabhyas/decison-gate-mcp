@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 import os
 from pathlib import Path
+import threading
 
 import psycopg
 from dotenv import load_dotenv
@@ -21,33 +22,35 @@ def _required_env(name: str) -> str:
 
 # Values come from the process environment, or from .env for local runs.
 # A variable already set on the server is left unchanged.
-DB__HOST = _required_env("DB__HOST")
-DB__PORT = int(_required_env("DB__PORT"))
-DB__NAME = _required_env("DB__NAME")
-DB__USER = _required_env("DB__USER")
-DB__PASSWORD = _required_env("DB__PASSWORD")
+# Read them on first use so importing this module does not open a database
+# connection. Image builds run `fastmcp inspect`, which imports the module
+# from a network that cannot reach Postgres.
 
 _DEFAULT_PAGE = 50
 _MAX_PAGE = 200
+_schema_ready = False
+_schema_lock = threading.Lock()
 
-_CONN = dict(
-    host=DB__HOST,
-    port=DB__PORT,
-    dbname=DB__NAME,
-    user=DB__USER,
-    password=DB__PASSWORD,
-    connect_timeout=15,
-    row_factory=dict_row,
-    options="-c timezone=UTC",
-)
+
+def _conn_kwargs() -> dict:
+    return dict(
+        host=_required_env("DB__HOST"),
+        port=int(_required_env("DB__PORT")),
+        dbname=_required_env("DB__NAME"),
+        user=_required_env("DB__USER"),
+        password=_required_env("DB__PASSWORD"),
+        connect_timeout=15,
+        row_factory=dict_row,
+        options="-c timezone=UTC",
+    )
 
 
 def _connect():
-    return psycopg.connect(**_CONN)
+    return psycopg.connect(**_conn_kwargs())
 
 
 async def _aconnect():
-    return await psycopg.AsyncConnection.connect(**_CONN)
+    return await psycopg.AsyncConnection.connect(**_conn_kwargs())
 
 
 def init_db():
@@ -112,13 +115,24 @@ def init_db():
                     WHERE supersedes_id IS NOT NULL
                     """
                 )
-        print(f"Database initialized: {DB__HOST}:{DB__PORT}/{DB__NAME}")
+        settings = _conn_kwargs()
+        print(
+            f"Database initialized: {settings['host']}:{settings['port']}/{settings['dbname']}"
+        )
     except Exception as e:
         print(f"Database initialization error: {e}")
         raise
 
 
-init_db()
+def ensure_db():
+    global _schema_ready
+    if _schema_ready:
+        return
+    with _schema_lock:
+        if _schema_ready:
+            return
+        init_db()
+        _schema_ready = True
 
 
 def _text(value: str | None) -> str:
@@ -190,6 +204,7 @@ async def capture_decision(
     ):
         return {"status": "error", "message": "supersedes_id must be a positive integer"}
     try:
+        ensure_db()
         async with await _aconnect() as conn:
             async with conn.cursor() as cur:
                 if supersedes_id is not None:
@@ -294,6 +309,7 @@ async def get_decisions(
         params.append(created_before)
     where = " AND ".join(filters)
     try:
+        ensure_db()
         async with await _aconnect() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(f"SELECT COUNT(*) AS total FROM decisions WHERE {where}", params)
@@ -322,5 +338,5 @@ async def get_decisions(
 
 
 if __name__ == "__main__":
-    mcp.run(transport="http", host="0.0.0.0", port=8000)
+    mcp.run(transport="http", host="0.0.0.0", port=8080)
     # mcp.run()
