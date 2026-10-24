@@ -1,5 +1,4 @@
 from datetime import datetime
-from fastapi import FastAPI, HTTPException
 from fastmcp import FastMCP
 import os
 import aiosqlite  # Changed: sqlite3 → aiosqlite
@@ -173,7 +172,8 @@ async def capture_decision(
         return {"status": "error", "message": f"Database error: {message}"}
 
 
-async def _fetch_decisions(
+@mcp.tool()
+async def get_decisions(
     user_id: str,
     community_id: str | None = None,
     session_id: str | None = None,
@@ -182,7 +182,12 @@ async def _fetch_decisions(
     limit: int = _DEFAULT_PAGE,
     offset: int = 0,
 ):
-    """Return stored decisions for a user, newest first."""
+    """Return stored decisions for a user, newest first.
+
+    community_id and session_id narrow the result when provided.
+    created_after and created_before are inclusive bounds (YYYY-MM-DD or YYYY-MM-DD HH:MM:SS).
+    A date with no time covers that whole day. limit defaults to 50 and cannot exceed 200.
+    """
     user_id = _text(user_id)
     community_id = _text(community_id)
     session_id = _text(session_id)
@@ -243,81 +248,7 @@ async def _fetch_decisions(
         return {"status": "error", "message": f"Database error: {str(e)}"}
 
 
-@mcp.tool()
-async def get_decisions(
-    user_id: str,
-    community_id: str | None = None,
-    session_id: str | None = None,
-    created_after: str | None = None,
-    created_before: str | None = None,
-    limit: int = _DEFAULT_PAGE,
-    offset: int = 0,
-):
-    """Return stored decisions for a user, newest first.
-
-    community_id and session_id narrow the result when provided.
-    created_after and created_before are inclusive bounds (YYYY-MM-DD or YYYY-MM-DD HH:MM:SS).
-    A date with no time covers that whole day. limit defaults to 50 and cannot exceed 200.
-    """
-    return await _fetch_decisions(
-        user_id=user_id,
-        community_id=community_id,
-        session_id=session_id,
-        created_after=created_after,
-        created_before=created_before,
-        limit=limit,
-        offset=offset,
-    )
-
-
-def create_app() -> FastAPI:
-    """Serve the decision API and the MCP endpoint on one process.
-
-    REST: GET /decisions
-    MCP:  /mcp
-    """
-    mcp_http = mcp.http_app(path="/mcp")
-    application = FastAPI(title="Decision Gate", lifespan=mcp_http.lifespan)
-
-    @application.get("/decisions")
-    async def list_decisions(
-        user_id: str,
-        community_id: str | None = None,
-        session_id: str | None = None,
-        created_after: str | None = None,
-        created_before: str | None = None,
-        limit: int = _DEFAULT_PAGE,
-        offset: int = 0,
-    ):
-        """Return stored decisions for a user, newest first.
-
-        Same filters as the get_decisions MCP tool.
-        """
-        result = await _fetch_decisions(
-            user_id=user_id,
-            community_id=community_id,
-            session_id=session_id,
-            created_after=created_after,
-            created_before=created_before,
-            limit=limit,
-            offset=offset,
-        )
-        if result.get("status") == "error":
-            message = str(result.get("message", ""))
-            code = 500 if message.startswith("Database error") else 400
-            raise HTTPException(status_code=code, detail=message)
-        return result
-
-    # Registered last so /decisions and /docs stay on this app. MCP stays at /mcp.
-    application.mount("/", mcp_http)
-    return application
-
-
-app = create_app()
-
-
 # Start the server
 if __name__ == "__main__":
-    import uvicorn
-
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    mcp.run(transport="http", host="0.0.0.0", port=8000)
+    # mcp.run()
