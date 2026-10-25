@@ -13,6 +13,19 @@ Insurance in the United States is mostly state law. Federal statutes override th
 5. Life, annuity, and long-term-care policy provisions are state insurance law, including free-look and contestability periods. See `decision-gate://rules/usa-insurance/life`.
 6. Privacy cuts across lines. HIPAA covers health plans. The Gramm-Leach-Bliley Act and the Fair Credit Reporting Act cover insurers more broadly. See `decision-gate://rules/usa-insurance/privacy`.
 
+## Processes
+
+Static prompts walk the related process. Call the prompt by name:
+
+- usa-insurance-process — choose which process applies
+- usa-insurance-authorize-and-sell
+- usa-insurance-place-coverage
+- usa-insurance-enroll-health
+- usa-insurance-handle-claim
+- usa-insurance-place-flood
+- usa-insurance-replace-life
+- usa-insurance-handle-personal-information
+
 ## Using these in a decision
 
 - Name the line of business, the state, and whether the coverage is an insurance policy or a self-funded employer plan.

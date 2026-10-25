@@ -392,6 +392,17 @@ Each stored row is one user verdict on a query.
 - decision-gate://rules/usa-insurance/life
 - decision-gate://rules/usa-insurance/privacy
 
+## Prompts
+
+- usa-insurance-process — choose the related United States insurance process
+- usa-insurance-authorize-and-sell
+- usa-insurance-place-coverage
+- usa-insurance-enroll-health
+- usa-insurance-handle-claim
+- usa-insurance-place-flood
+- usa-insurance-replace-life
+- usa-insurance-handle-personal-information
+
 ## Tools
 
 - capture_decision records a verdict
@@ -521,6 +532,77 @@ def _register_usa_insurance_resources() -> None:
 
 
 _register_usa_insurance_resources()
+
+
+_USA_INSURANCE_PROMPTS = (
+    (
+        "usa-insurance-process",
+        "United States insurance process",
+        "Choose the related United States insurance process and the rule resource that goes with it.",
+        "index.md",
+    ),
+    (
+        "usa-insurance-authorize-and-sell",
+        "Authorize a sale",
+        "Check insurer authority, producer license, appointment, and the state form path before a sale.",
+        "authorize-and-sell.md",
+    ),
+    (
+        "usa-insurance-place-coverage",
+        "Place auto, home, or workers' compensation",
+        "Bind auto, homeowners, or workers' compensation coverage under the law of the state involved.",
+        "place-coverage.md",
+    ),
+    (
+        "usa-insurance-enroll-health",
+        "Enroll in health coverage",
+        "Classify the health arrangement, then enroll under the federal and state rules that apply to it.",
+        "enroll-health.md",
+    ),
+    (
+        "usa-insurance-handle-claim",
+        "Handle a claim",
+        "Investigate a claim, match the policy form, and pay or deny with the controlling language.",
+        "handle-claim.md",
+    ),
+    (
+        "usa-insurance-place-flood",
+        "Place flood insurance",
+        "Decide whether federal mandatory purchase applies and whether the offered policy satisfies it.",
+        "place-flood.md",
+    ),
+    (
+        "usa-insurance-replace-life",
+        "Issue or replace life or annuity coverage",
+        "Issue or replace a life policy, annuity, or long-term-care policy, including free look and disclosure.",
+        "replace-life.md",
+    ),
+    (
+        "usa-insurance-handle-personal-information",
+        "Use personal information",
+        "Apply HIPAA, the Gramm-Leach-Bliley Act, or the Fair Credit Reporting Act to this insurance transaction.",
+        "personal-information.md",
+    ),
+)
+
+
+def _static_prompt(path: Path):
+    def show_prompt() -> str:
+        return path.read_text(encoding="utf-8")
+
+    return show_prompt
+
+
+def _register_usa_insurance_prompts() -> None:
+    root = Path(__file__).resolve().parent / "prompts" / "usa-insurance"
+    for name, title, description, filename in _USA_INSURANCE_PROMPTS:
+        show_prompt = _static_prompt(root / filename)
+        show_prompt.__name__ = name.replace("-", "_")
+        show_prompt.__doc__ = description
+        mcp.prompt(show_prompt, name=name, title=title, description=description)
+
+
+_register_usa_insurance_prompts()
 
 
 if __name__ == "__main__":
