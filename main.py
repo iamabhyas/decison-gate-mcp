@@ -28,6 +28,10 @@ def _required_env(name: str) -> str:
 
 _DEFAULT_PAGE = 50
 _MAX_PAGE = 200
+_DECISION_COLUMNS = (
+    "id, user_id, community_id, session_id, query, verdict, note, supersedes_id, "
+    "is_archived, is_pinned, pinned_at, archived_at, created_at, updated_at"
+)
 _schema_ready = False
 _schema_lock = threading.Lock()
 
@@ -316,8 +320,7 @@ async def get_decisions(
                 total = (await cur.fetchone())["total"]
                 await cur.execute(
                     f"""
-                    SELECT id, user_id, community_id, session_id, query, verdict, note, supersedes_id,
-                           is_archived, is_pinned, pinned_at, archived_at, created_at, updated_at
+                    SELECT {_DECISION_COLUMNS}
                     FROM decisions
                     WHERE {where}
                     ORDER BY created_at DESC, id DESC
@@ -335,6 +338,104 @@ async def get_decisions(
             }
     except Exception as e:
         return {"status": "error", "message": f"Database error: {e}"}
+
+
+def _resource_result(result: dict) -> dict:
+    if result.get("status") != "success":
+        raise ValueError(result.get("message") or "could not read decisions")
+    return result
+
+
+@mcp.resource(
+    "decision-gate://guide",
+    name="decision-gate-guide",
+    title="Decision-Gate guide",
+    mime_type="text/markdown",
+    description="Verdicts, stored fields, and the resource URIs for Decision-Gate.",
+)
+def decision_guide() -> str:
+    """Explain how decisions are stored and which resources expose them."""
+    return """# Decision-Gate
+
+Each stored row is one user verdict on a query.
+
+## Verdicts
+
+- approved
+- rejected
+- pending
+
+## Fields
+
+- id
+- user_id
+- community_id
+- session_id
+- query
+- verdict
+- note
+- supersedes_id: an earlier decision by the same user that this row replaces
+- is_archived, archived_at
+- is_pinned, pinned_at
+- created_at, updated_at: UTC timestamps as YYYY-MM-DD HH:MM:SS
+
+## Resources
+
+- decision-gate://guide
+- decision-gate://users/{user_id}/decisions — newest 50 decisions for that user
+- decision-gate://users/{user_id}/decisions/{decision_id} — one decision for that user
+
+## Tools
+
+- capture_decision records a verdict
+- get_decisions lists decisions with community, session, date, and page filters
+"""
+
+
+@mcp.resource(
+    "decision-gate://users/{user_id}/decisions",
+    name="user-decisions",
+    title="Decisions for a user",
+    mime_type="application/json",
+    description="Newest decisions stored for one user. Returns the default page of 50.",
+)
+async def user_decisions_resource(user_id: str) -> dict:
+    """Return the default page of decisions stored for a user."""
+    return _resource_result(await get_decisions(user_id=user_id))
+
+
+@mcp.resource(
+    "decision-gate://users/{user_id}/decisions/{decision_id}",
+    name="user-decision",
+    title="One decision",
+    mime_type="application/json",
+    description="One decision that belongs to the user.",
+)
+async def user_decision_resource(user_id: str, decision_id: str) -> dict:
+    """Return one stored decision for a user."""
+    user_id = _text(user_id)
+    if not user_id:
+        raise ValueError("user_id is required")
+    if not decision_id.isdigit() or int(decision_id) < 1:
+        raise ValueError("decision_id must be a positive integer")
+    try:
+        ensure_db()
+        async with await _aconnect() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    f"""
+                    SELECT {_DECISION_COLUMNS}
+                    FROM decisions
+                    WHERE user_id = %s AND id = %s
+                    """,
+                    (user_id, int(decision_id)),
+                )
+                row = await cur.fetchone()
+    except Exception as e:
+        raise ValueError(f"Database error: {e}") from e
+    if row is None:
+        raise ValueError("decision not found for this user")
+    return {"status": "success", "decision": _public_row(row)}
 
 
 if __name__ == "__main__":
