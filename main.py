@@ -384,6 +384,13 @@ Each stored row is one user verdict on a query.
 - decision-gate://guide
 - decision-gate://users/{user_id}/decisions — newest 50 decisions for that user
 - decision-gate://users/{user_id}/decisions/{decision_id} — one decision for that user
+- decision-gate://rules/usa-insurance — how United States insurance rules relate
+- decision-gate://rules/usa-insurance/state-regulation
+- decision-gate://rules/usa-insurance/health
+- decision-gate://rules/usa-insurance/property-casualty
+- decision-gate://rules/usa-insurance/flood
+- decision-gate://rules/usa-insurance/life
+- decision-gate://rules/usa-insurance/privacy
 
 ## Tools
 
@@ -436,6 +443,84 @@ async def user_decision_resource(user_id: str, decision_id: str) -> dict:
     if row is None:
         raise ValueError("decision not found for this user")
     return {"status": "success", "decision": _public_row(row)}
+
+
+_USA_INSURANCE_RESOURCES = (
+    (
+        "decision-gate://rules/usa-insurance",
+        "usa-insurance-rules",
+        "United States insurance rules",
+        "How United States insurance rules relate across state regulation, health, property, flood, life, and privacy.",
+        "index.md",
+    ),
+    (
+        "decision-gate://rules/usa-insurance/state-regulation",
+        "usa-insurance-state-regulation",
+        "State regulation of insurance",
+        "McCarran-Ferguson, licensing, rates and forms, unfair practices, and solvency.",
+        "state-regulation.md",
+    ),
+    (
+        "decision-gate://rules/usa-insurance/health",
+        "usa-insurance-health",
+        "Health coverage rules",
+        "ACA market rules, ERISA, COBRA, parity, surprise bills, GINA, Medicare, and Medicaid.",
+        "health.md",
+    ),
+    (
+        "decision-gate://rules/usa-insurance/property-casualty",
+        "usa-insurance-property-casualty",
+        "Property, casualty, and workers' compensation",
+        "Auto financial responsibility, homeowners, claims handling, and workers' compensation.",
+        "property-casualty.md",
+    ),
+    (
+        "decision-gate://rules/usa-insurance/flood",
+        "usa-insurance-flood",
+        "Flood insurance",
+        "NFIP coverage and the federal mandatory-purchase rule for Special Flood Hazard Areas.",
+        "flood.md",
+    ),
+    (
+        "decision-gate://rules/usa-insurance/life",
+        "usa-insurance-life",
+        "Life, annuity, and long-term care",
+        "Free look, contestability, replacement, annuity recommendations, and long-term care.",
+        "life.md",
+    ),
+    (
+        "decision-gate://rules/usa-insurance/privacy",
+        "usa-insurance-privacy",
+        "Privacy and consumer reports",
+        "HIPAA, the Gramm-Leach-Bliley Act, and the Fair Credit Reporting Act as they apply to insurance.",
+        "privacy.md",
+    ),
+)
+
+
+def _static_markdown(path: Path):
+    def read_rule() -> str:
+        return path.read_text(encoding="utf-8")
+
+    return read_rule
+
+
+def _register_usa_insurance_resources() -> None:
+    root = Path(__file__).resolve().parent / "resources" / "usa-insurance"
+    for uri, name, title, description, filename in _USA_INSURANCE_RESOURCES:
+        read_rule = _static_markdown(root / filename)
+        read_rule.__name__ = name.replace("-", "_")
+        read_rule.__doc__ = description
+        mcp.resource(
+            uri,
+            name=name,
+            title=title,
+            mime_type="text/markdown",
+            description=description,
+        )(read_rule)
+
+
+_register_usa_insurance_resources()
 
 
 if __name__ == "__main__":
